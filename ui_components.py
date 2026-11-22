@@ -552,10 +552,12 @@ class VerilogCodeEditor(ctk.CTkFrame):
 
     def __init__(self, master, config, role: str = "DESIGN", on_save: Callable | None = None,
                  on_modified: Callable | None = None, on_cursor: Callable | None = None,
-                 on_zoom: Callable | None = None, on_focus: Callable | None = None, **kw):
+                 on_zoom: Callable | None = None, on_focus: Callable | None = None,
+                 on_rename: Callable | None = None, **kw):
         super().__init__(master, corner_radius=0, fg_color=VS["editor"], **kw)
         self.cfg, self.role, self.path = config, role, None
         self.on_save, self.on_modified, self.on_cursor, self.on_zoom, self.on_focus = on_save, on_modified, on_cursor, on_zoom, on_focus
+        self.on_rename = on_rename
         self.on_generate: Callable | None = None
         self.on_app_ctrl: Callable | None = None
         self.completion_provider: Callable | None = None     # -> list of module infos (dedup'd global index)
@@ -735,6 +737,12 @@ class VerilogCodeEditor(ctk.CTkFrame):
         if cmd:
             for w in (tab, row, *widgets):
                 w.bind("<Button-1>", lambda e, c=cmd: c())
+        if active and self.on_rename:
+            menu = DarkMenu(self, self.cfg)
+            menu.add_command(label="Rename File / Module…", command=self.on_rename)
+            for w in (tab, row, *widgets):
+                w.bind("<Button-3>", lambda e, m=menu: (m.tk_popup(e.x_root, e.y_root),
+                                                        m.grab_release())[0])
 
     def _update_breadcrumb(self, text: str | None = None) -> None:
         parts = []
@@ -980,6 +988,7 @@ class VerilogCodeEditor(ctk.CTkFrame):
         t.bind("<Control-KeyPress>", self._on_ctrl)
         if IS_MAC:
             t.bind("<Command-KeyPress>", self._on_ctrl)
+        t.bind("<F2>", lambda e: (self.on_rename() if self.on_rename else None, "break")[1])
         t.bind("<Control-MouseWheel>", lambda e: (self._zoom(1 if e.delta > 0 else -1), "break")[1])
         t.bind("<Control-Button-4>", lambda e: (self._zoom(1), "break")[1])
         t.bind("<Control-Button-5>", lambda e: (self._zoom(-1), "break")[1])

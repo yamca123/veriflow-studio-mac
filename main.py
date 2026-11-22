@@ -636,6 +636,7 @@ class VeriFlowApp(ctk.CTk):
         self.design_ed.add_menu_command("🧪 Generate Self-Checking Testbench…", lambda: self.self_check_dialog())
         for ed in (self.design_ed, self.tb_ed):
             ed.completion_provider = lambda: list(self._known_cache.values())
+            ed.on_rename = lambda _e=None, editor=ed: self.rename_current_file(editor)
         self.active_editor = self.design_ed
         self.welcome = WelcomeView(self.ed_area, self)        # overlays the editor group while shown
         self.vpane.add(self.ed_area, minsize=int(200 * sc), stretch="always")
@@ -792,6 +793,13 @@ class VeriFlowApp(ctk.CTk):
                                       font=(self.cfg["editor_font_family"], self.cfg["console_font_size"]))
         self.console.grid(row=0, column=0, sticky="nsew", padx=(8, 0))
         self.console.configure(state="disabled")
+        console_text = self.console._textbox
+        console_text.configure(exportselection=True)
+        console_text.bind("<Command-a>", lambda e: (self._select_all_console(), "break")[1])
+        console_text.bind("<Control-a>", lambda e: (self._select_all_console(), "break")[1])
+        for sequence in ("<Command-c>", "<Control-c>"):
+            console_text.bind(sequence, lambda e: self._copy_console_selection(), add="+")
+        console_text.bind("<Button-3>", lambda e: self._console_context_menu(e))
         self.console.tag_bind("link", "<Enter>", lambda e: self.console._textbox.configure(cursor="hand2"))
         self.console.tag_bind("link", "<Leave>", lambda e: self.console._textbox.configure(cursor="xterm"))
         pf = ctk.CTkFrame(t_prob, fg_color="transparent", corner_radius=0)
@@ -1397,6 +1405,145 @@ class VeriFlowApp(ctk.CTk):
                 self.save_editor(ed, lint=False, quiet=quiet)
         self.run_lint()
 
+    def rename_current_file(self, ed: VerilogCodeEditor | None = None) -> None:
+        ed = ed or self.active_editor
+        if ed is None or not ed.path:
+            messagebox.showinfo("Rename", "Open a Verilog file first.", parent=self)
+            return
+        old_path = Path(ed.path)
+        if not old_path.is_file() and not ed.is_modified:
+            messagebox.showinfo("Rename", "Save the file before renaming it.", parent=self)
+            return
+
+        parsed = parse_verilog_module(old_path, ed.get_content())
+        old_module = parsed.get("module_name") or old_path.stem
+        old_file_stem = old_path.stem
+        default_module = old_module
+
+        dialog = ctk.CTkToplevel(self)
+        dialog.title("Rename File / Module")
+        dialog.geometry("520x220")
+        dialog.transient(self)
+        dialog.configure(fg_color=VS["editor"])
+        dialog.grid_columnconfigure(1, weight=1)
+
+        ctk.CTkLabel(dialog, text="Rename the file and Verilog module name",
+                     font=font(14, "bold"), text_color=VS["text"]).grid(
+            row=0, column=0, columnspan=2, sticky="w", padx=16, pady=(14, 10))
+        ctk.CTkLabel(dialog, text="File name", text_color=VS["text"]).grid(row=1, column=0, sticky="e", padx=(16, 8), pady=6)
+        file_var = tk.StringVar(value=old_path.name)
+        file_entry = ctk.CTkEntry(dialog, textvariable=file_var, height=30, **entry_style())
+        file_entry.grid(row=1, column=1, sticky="ew", padx=(0, 16), pady=6)
+
+        ctk.CTkLabel(dialog, text="Module name", text_color=VS["text"]).grid(row=2, column=0, sticky="e", padx=(16, 8), pady=6)
+        module_var = tk.StringVar(value=default_module)
+        module_entry = ctk.CTkEntry(dialog, textvariable=module_var, height=30, **entry_style())
+        module_entry.grid(row=2, column=1, sticky="ew", padx=(0, 16), pady=6)
+
+        result = {"ok": False}
+
+        def cancel():
+            dialog.grab_release()
+            dialog.destroy()
+
+        def apply():
+            file_name = file_var.get().strip()
+            new_module = module_var.get().strip()
+            if not file_name:
+                messagebox.showerror("Rename", "The file name cannot be empty.", parent=dialog)
+                return
+            if not file_name.lower().endswith(".v"):
+                file_name += ".v"
+            if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_$]*", new_module):
+                messagebox.showerror("Rename", "Use a valid Verilog module name.", parent=dialog)
+                return
+            if not re.fullmatch(r"[A-Za-z0-9_. -]+\.v", file_name, re.I):
+                messagebox.showerror("Rename", "Use a valid .v file name.", parent=dialog)
+                return
+
+            new_path = old_path.with_name(file_name)
+            is_design = ed is self.design_ed
+            if is_design and new_path.stem != new_module:
+                messagebox.showerror("Rename",
+                                     "For a design file, the file name and module name should match.",
+                                     parent=dialog)
+                return
+            if new_path != old_path and new_path.exists():
+                messagebox.showerror("Rename", f"{file_name} already exists.", parent=dialog)
+                return
+
+            if ed.is_modified:
+                if not self.save_editor(ed, lint=False, quiet=True):
+                    return
+
+            old_text = ed.get_content()
+            new_text = re.sub(r"(?m)^(\s*module\s+)" + re.escape(old_module) + r"\b",
+                              rf"\g<1>{new_module}", old_text)
+            if new_text == old_text and old_module != new_module:
+                messagebox.showerror("Rename", f"Could not find module '{old_module}' in the file.", parent=dialog)
+                return
+
+            tb_path = None
+            tb_text = None
+            if is_design:
+                old_tb_module = f"{old_module}_tb"
+                new_tb_module = f"{new_module}_tb"
+                old_tb_path = old_path.with_name(f"{old_file_stem}_tb.v")
+                tb_path = old_tb_path
+                if old_tb_path.is_file():
+                    tb_text = read_source(old_tb_path)[0]
+                    tb_text = re.sub(r"\b" + re.escape(old_module) + r"\b", new_module, tb_text)
+                    tb_text = re.sub(r"\b" + re.escape(old_tb_module) + r"\b", new_tb_module, tb_text)
+                    tb_text = re.sub(re.escape(f"{old_module}.vcd"), f"{new_module}.vcd", tb_text)
+
+            try:
+                if new_path != old_path:
+                    old_path.rename(new_path)
+                ed.set_content(new_text, str(new_path), keep_view=True)
+                ed.mark_saved()
+
+                if is_design:
+                    new_tb_path = new_path.with_name(f"{new_path.stem}_tb.v")
+                    if tb_path and tb_path.is_file():
+                        if new_tb_path != tb_path:
+                            if new_tb_path.exists():
+                                raise FileExistsError(f"{new_tb_path.name} already exists")
+                            tb_path.rename(new_tb_path)
+                        if tb_text is not None:
+                            new_tb_path.write_text(tb_text, encoding="utf-8")
+                        if self.tb_ed.path and os.path.normcase(self.tb_ed.path) == os.path.normcase(str(tb_path)):
+                            self._load_editor(self.tb_ed, new_tb_path)
+                        self.tb_ed.set_missing(not new_tb_path.is_file())
+                elif ed is self.tb_ed:
+                    pass
+
+                self._scan_workspace(force=True)
+                self._load_editor(ed, new_path)
+                if is_design:
+                    self.module = new_path.stem
+                    self.cfg.update(last_module=self.module)
+                    self.module_menu.set(self.module)
+                self._render_module_list()
+                self.run_lint()
+                result["ok"] = True
+                self.toast(f"Renamed to {new_path.name} / module {new_module}", "ok")
+            except OSError as exc:
+                messagebox.showerror("Rename failed", str(exc), parent=dialog)
+                return
+
+            dialog.grab_release()
+            dialog.destroy()
+
+        ctk.CTkButton(dialog, text="Rename", height=32, fg_color=RUN_GREEN,
+                      hover_color=RUN_GREEN_HOVER, command=apply).grid(
+            row=3, column=1, sticky="e", padx=(0, 16), pady=(12, 16))
+        ghost_button(dialog, "Cancel", cancel, width=90, height=32).grid(
+            row=3, column=0, sticky="w", padx=16, pady=(12, 16))
+        file_entry.bind("<Return>", lambda e: apply())
+        module_entry.bind("<Return>", lambda e: apply())
+        dialog.bind("<Escape>", lambda e: cancel())
+        dialog.after(120, lambda: (dialog.lift(), dialog.focus_force(), file_entry.focus_set()))
+
     def _on_editor_modified(self, ed: VerilogCodeEditor, modified: bool) -> None:
         any_mod = self.design_ed.is_modified or self.tb_ed.is_modified
         self.st_saved.configure(text="● Modified" if any_mod else "✔ Saved")
@@ -1886,6 +2033,32 @@ class VeriFlowApp(ctk.CTk):
         return None
 
     # ================================================================== console
+    def _select_all_console(self) -> None:
+        text = self.console._textbox
+        text.tag_add("sel", "1.0", "end-1c")
+        text.mark_set("insert", "end-1c")
+        text.see("insert")
+
+    def _copy_console_selection(self) -> str:
+        text = self.console._textbox
+        try:
+            selected = text.get("sel.first", "sel.last")
+        except tk.TclError:
+            selected = text.get("1.0", "end-1c")
+        self.clipboard_clear()
+        self.clipboard_append(selected)
+        self.st_msg.configure(text="Copied console output")
+        return "break"
+
+    def _console_context_menu(self, event) -> None:
+        menu = DarkMenu(self, self.cfg)
+        menu.add_command(label="Select All", command=self._select_all_console)
+        menu.add_command(label="Copy", command=self._copy_console_selection)
+        try:
+            menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            menu.grab_release()
+
     def log(self, text: str, tag: str | None = None) -> None:
         """Append a console line; every `file.v:line[:col]` in it becomes a link that opens that line."""
         self.console.configure(state="normal")
