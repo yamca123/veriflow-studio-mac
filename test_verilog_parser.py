@@ -1,6 +1,9 @@
 import unittest
+import tempfile
+from pathlib import Path
 
 from verilog_parser import generate_testbench_skeleton
+from welcome import create_module_files
 
 
 def make_module(instantiations=None, ports=None):
@@ -45,6 +48,18 @@ class TestbenchGenerationTests(unittest.TestCase):
         self.assertNotIn("$monitor", tb)
         self.assertIn("PASS:", tb)
         self.assertIn("FAIL:", tb)
+
+
+class ModuleFolderTests(unittest.TestCase):
+    def test_module_and_testbench_are_created_in_module_named_folder(self):
+        with tempfile.TemporaryDirectory() as td:
+            made = create_module_files(Path(td), "Adder", inputs="a, b", outputs="sum")
+
+            folder = Path(td) / "Adder"
+            self.assertEqual([p.parent for p in made], [folder, folder])
+            self.assertEqual([p.name for p in made], ["Adder.v", "Adder_tb.v"])
+            self.assertTrue((folder / "Adder.v").is_file())
+            self.assertTrue((folder / "Adder_tb.v").is_file())
 
 
 if __name__ == "__main__":

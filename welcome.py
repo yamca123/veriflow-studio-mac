@@ -55,13 +55,13 @@ def module_source(name: str, inputs: str = "", outputs: str = "") -> str:
 
 
 def create_module_files(folder: Path, name: str, inputs: str = "", outputs: str = "", tb_mode: str = TB_MODES[0]) -> list[Path]:
-    """Create <folder>/<name>.v (+ <name>_tb.v). Raises ValueError / FileExistsError / OSError with a readable message."""
+    """Create <folder>/<name>/<name>.v (+ <name>/<name>_tb.v)."""
     if not IDENT_RE.fullmatch(name or ""):
         raise ValueError("Module name must be a Verilog identifier: letters, digits, '_' (not starting with a digit).")
     if name.lower().endswith("_tb"):
         raise ValueError("Pick the design name (e.g. ALU16) - the _tb.v testbench is generated for you.")
     text = module_source(name, inputs, outputs)
-    folder = Path(folder)
+    folder = Path(folder) / name
     folder.mkdir(parents=True, exist_ok=True)
     existing = {p.name.lower() for p in folder.glob("*.v")}
     design, tb = folder / f"{name}.v", folder / f"{name}_tb.v"
@@ -289,9 +289,13 @@ class NewModuleDialog(ctk.CTkToplevel):
         sub = self.sub_var.get().strip().strip("\\/")
         return base / sub if sub else base
 
+    def module_folder(self) -> Path:
+        name = self.name_var.get().strip() or "<Module>"
+        return self.target_folder() / name
+
     def _update_preview(self) -> None:
         name = self.name_var.get().strip() or "<Module>"
-        folder = self.target_folder()
+        folder = self.target_folder() / name
         files = f"{name}.v" + ("" if self.tb_var.get() == TB_MODES[2] else f"  +  {name}_tb.v")
         new = "" if folder.is_dir() else "   (folder will be created)"
         self.preview.configure(text=f"Will create:  {files}\nIn:  {folder}{new}")
@@ -314,7 +318,7 @@ class NewModuleDialog(ctk.CTkToplevel):
         except (ValueError, FileExistsError, OSError) as exc:
             messagebox.showerror(self.title(), str(exc), parent=self)
             return
-        self.result = {"folder": self.target_folder(), "module": name, "files": files, "npp": self.npp_var.get()}
+        self.result = {"folder": self.module_folder(), "module": name, "files": files, "npp": self.npp_var.get()}
         self.app.cfg.update(last_parent_dir=str(Path(self.loc_var.get().strip().strip('"'))))
         self.grab_release()
         self.withdraw()                                  # destroy a moment later: CTkToplevel still has deferred
