@@ -23,10 +23,10 @@ class TestbenchGenerationTests(unittest.TestCase):
         tb = generate_testbench_skeleton(make_module())
 
         self.assertNotIn("$monitor", tb)
-        self.assertIn("#10;", tb)
+        self.assertIn("#100;", tb)
         self.assertIn('$display("a=%b | y=%b", a, y);', tb)
         self.assertIn("for (i = 0; i < (1 << 1); i = i + 1)", tb)
-        self.assertIn("#10; $display", tb)
+        self.assertIn("#100; $display", tb)
 
     def test_gate_delay_testbench_uses_settling_delay(self):
         module = make_module(instantiations=[
