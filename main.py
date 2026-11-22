@@ -1061,7 +1061,13 @@ class VeriFlowApp(ctk.CTk):
         found = {k: v for k, v in detect_toolchains().items() if v}
         self.cfg.update(**found)
         if not self.cfg.toolchain_available():
-            messagebox.showwarning("Auto-Detect", "Icarus Verilog was not found.\nInstall it to C:\\iverilog or set the paths in ⚙ Settings.")
+            if IS_MAC:
+                messagebox.showwarning("Auto-Detect",
+                                       "Icarus Verilog was not found.\nInstall it with:\nbrew install icarus-verilog\n"
+                                       "Then use Auto-Detect again or set the paths in ⚙ Settings.")
+            else:
+                messagebox.showwarning("Auto-Detect",
+                                       "Icarus Verilog was not found.\nInstall it to C:\\iverilog or set the paths in ⚙ Settings.")
 
     def toggle_theme(self) -> None:
         if is_dark(self.cfg):

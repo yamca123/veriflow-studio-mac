@@ -287,11 +287,20 @@ class ConfigManager:
             self.data["ui_font_size"] = max(self.data["ui_font_size"], 13)
             self.data["ui_revision"] = UI_REVISION
             self.save()
-        if not Path(self.data["iverilog_path"]).is_file():      # first run on a non-default install
-            found = detect_toolchains()
-            for k, v in found.items():
-                if v and not Path(str(self.data[k])).exists():
-                    self.data[k] = v
+        detected = detect_toolchains()
+        changed = False
+        for key, value in detected.items():
+            if IS_MAC and value:
+                # macOS GUI apps do not always inherit Homebrew's PATH. Persist known
+                # executable locations instead of relying on repeated shell lookups.
+                if not Path(str(self.data[key])).is_file():
+                    self.data[key] = value
+                    changed = True
+            elif value and not Path(str(self.data[key])).is_file():
+                self.data[key] = value
+                changed = True
+        if changed:
+            self.save()
 
     def save(self) -> None:
         try:
