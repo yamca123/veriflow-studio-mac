@@ -361,7 +361,11 @@ class PackageManager:
     def resolve(self, work_dir, module: str, extra_files: list | tuple = ()) -> dict:
         """Everything the compiler needs for <module>.v + <module>_tb.v compiled from work_dir."""
         work_dir = Path(work_dir)
-        roots = [work_dir / f"{module}.v", work_dir / f"{module}_tb.v"] + [work_dir / f for f in extra_files]
+        design_matches = list(work_dir.rglob(f"{module}.v"))
+        tb_matches = list(work_dir.rglob(f"{module}_tb.v"))
+        roots = ([design_matches[0]] if design_matches else [work_dir / f"{module}.v"])
+        roots += ([tb_matches[0]] if tb_matches else [work_dir / f"{module}_tb.v"])
+        roots += [work_dir / f for f in extra_files]
         index = self.build_index(work_dir, exclude_files=roots)
         shadowed: dict = {}
         needed: list[str] = []

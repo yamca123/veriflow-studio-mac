@@ -433,12 +433,12 @@ def public_module_info(info: dict) -> dict:
 
 
 def scan_module_dir(folder: Path | str, cache: dict | None = None) -> dict[str, dict]:
-    """Parse every *.v file in a folder -> {module_name: module_info}. Optional mtime cache dict."""
+    """Parse every *.v file recursively -> {module_name: module_info}. Optional mtime cache dict."""
     out: dict[str, dict] = {}
     folder = Path(folder)
     if not folder.is_dir():
         return out
-    for f in sorted(folder.glob("*.v")):
+    for f in sorted(folder.rglob("*.v"), key=lambda p: str(p).lower()):
         try:
             mtime = f.stat().st_mtime
         except OSError:
@@ -486,7 +486,7 @@ def build_global_module_index(library_dirs: list, work_dir: Path | str | None = 
     """
     sources: list[tuple[Path, str, bool, frozenset]] = []
     if work_dir:
-        sources.append((Path(work_dir), "Workspace", False, frozenset()))
+        sources.append((Path(work_dir), "Workspace", True, frozenset()))
     for item in library_dirs:
         if isinstance(item, dict):
             sources.append((Path(item["path"]), item.get("name") or Path(item["path"]).name, bool(item.get("recursive")),

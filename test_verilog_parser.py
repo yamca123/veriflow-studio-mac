@@ -2,7 +2,7 @@ import unittest
 import tempfile
 from pathlib import Path
 
-from verilog_parser import generate_testbench_skeleton
+from verilog_parser import generate_testbench_skeleton, scan_module_dir
 from welcome import create_module_files
 
 
@@ -60,6 +60,17 @@ class ModuleFolderTests(unittest.TestCase):
             self.assertEqual([p.name for p in made], ["Adder.v", "Adder_tb.v"])
             self.assertTrue((folder / "Adder.v").is_file())
             self.assertTrue((folder / "Adder_tb.v").is_file())
+
+    def test_workspace_scans_modules_in_nested_folders(self):
+        with tempfile.TemporaryDirectory() as td:
+            folder = Path(td) / "Training" / "Adder"
+            folder.mkdir(parents=True)
+            (folder / "Adder.v").write_text("module Adder(input a, output y); assign y = a; endmodule\n")
+
+            modules = scan_module_dir(Path(td) / "Training")
+
+            self.assertIn("Adder", modules)
+            self.assertEqual(modules["Adder"]["file"], str(folder / "Adder.v"))
 
 
 if __name__ == "__main__":

@@ -1239,7 +1239,9 @@ class VeriFlowApp(ctk.CTk):
         if not self.work_dir or not self.work_dir.is_dir():
             return None
         try:
-            return tuple(sorted((p.name, p.stat().st_mtime) for p in self.work_dir.glob("*.v")))
+            files = (p for p in self.work_dir.rglob("*") if p.suffix.lower() in (".v", ".sv"))
+            return tuple(sorted((str(p.relative_to(self.work_dir)), p.stat().st_mtime)
+                                for p in files if p.is_file()))
         except OSError:
             return None
 
@@ -1249,7 +1251,7 @@ class VeriFlowApp(ctk.CTk):
             return False
         self._ws_signature = sig
         self.modules = {}
-        files = sorted(self.work_dir.glob("*.v"), key=lambda p: p.name.lower()) if self.work_dir else []
+        files = sorted(self.work_dir.rglob("*.v"), key=lambda p: str(p).lower()) if self.work_dir else []
         for f in files:
             if f.stem.lower().endswith("_tb"):
                 continue
@@ -1299,7 +1301,9 @@ class VeriFlowApp(ctk.CTk):
             self.sec_extra.set_count(0)
             return
         skip = {f"{self.module}.v", f"{self.module}_tb.v"} if self.module else set()
-        files = [p.name for p in sorted(self.work_dir.glob("*.v")) if p.name not in skip and not p.stem.lower().endswith("_tb")]
+        files = [str(p.relative_to(self.work_dir))
+                 for p in sorted(self.work_dir.rglob("*.v"), key=lambda p: str(p).lower())
+                 if p.name not in skip and not p.stem.lower().endswith("_tb")]
         self.sec_extra.set_count(len(files))
         if not files:
             ctk.CTkLabel(self.extra_list, text="Other modules are found automatically through -y",

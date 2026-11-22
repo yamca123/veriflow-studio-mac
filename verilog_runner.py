@@ -404,6 +404,10 @@ class VerilogRunner:
         pm, res = self.package_manager, None
         if c["include_workdir_as_ylib"]:
             add_y(work_dir)
+            work_path = Path(work_dir)
+            for d in sorted({p.parent for p in work_path.rglob("*") if p.suffix.lower() in (".v", ".sv")},
+                            key=lambda p: str(p).lower()):
+                add_y(d)
         if pm is None:
             add_y(c["lib_dir"])
         else:
@@ -425,7 +429,10 @@ class VerilogRunner:
             cmd += ["-Wall", "-Winfloop"]
         for lf in (res or {}).get("l_files", []):
             cmd += ["-l", lf]              # must precede the source files (iverilog rejects -l after them)
-        cmd += [f"{module}.v", f"{module}_tb.v", *[str(f) for f in extra_files]]
+        work_path = Path(work_dir)
+        design = next(work_path.rglob(f"{module}.v"), work_path / f"{module}.v")
+        tb = next(work_path.rglob(f"{module}_tb.v"), work_path / f"{module}_tb.v")
+        cmd += [str(design), str(tb), *[str(f) for f in extra_files]]
         if record:
             self.last_resolution = res
         return cmd
@@ -543,7 +550,10 @@ class VerilogRunner:
         return proc.returncode, decode_output(out), decode_output(err), timed_out
 
     def _pipeline(self, work_dir: Path, module: str, extra: list[str], mock: bool, outputs) -> None:
-        design, tb = work_dir / f"{module}.v", work_dir / f"{module}_tb.v"
+        design_matches = list(work_dir.rglob(f"{module}.v"))
+        tb_matches = list(work_dir.rglob(f"{module}_tb.v"))
+        design = design_matches[0] if design_matches else work_dir / f"{module}.v"
+        tb = tb_matches[0] if tb_matches else work_dir / f"{module}_tb.v"
         if mock:
             self._emit("STAGE_START", stage="compile", cmd="[demo mode] built-in Python gate-level simulator")
             ok, text = mock_simulate(design)
