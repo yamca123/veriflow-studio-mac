@@ -1,5 +1,32 @@
 <a id="top"></a>
 
+## macOS quick start
+
+The app supports Apple silicon and Intel Macs. Install Icarus Verilog with Homebrew:
+
+```bash
+brew install icarus-verilog
+# Optional waveform viewer:
+brew install gtkwave
+```
+
+From a terminal in the repository:
+
+```bash
+chmod +x run_macos.sh build_macos.sh
+./run_macos.sh
+```
+
+To create a standalone `VeriFlow Studio.app`:
+
+```bash
+./build_macos.sh
+open "dist/VeriFlow Studio.app"
+```
+
+Settings are stored at `~/Library/Application Support/VeriFlowStudio/config.json`.
+On macOS, use **Command** for editor shortcuts (`Cmd+O`, `Cmd+N`, `Cmd+S`, `Cmd+F`, and `Cmd+/`).
+
 [🇬🇧 English](#english-documentation) | [🇮🇱 עברית (Hebrew Documentation)](#תיעוד-מלא-בעברית)
 
 # VeriFlow Studio — VS Code-Styled Icarus Verilog IDE & One-Click Runner

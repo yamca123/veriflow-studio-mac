@@ -12,13 +12,21 @@ from typing import Any, Callable
 APP_NAME = "VeriFlow Studio"
 APP_VERSION = "1.5.1"
 IS_WINDOWS = os.name == "nt"
+IS_MAC = sys.platform == "darwin"
+
+if IS_MAC:
+    DEFAULT_EDITOR_FONT = "SF Mono"
+    DEFAULT_UI_FONT = "SF Pro"
+else:
+    DEFAULT_EDITOR_FONT = "Consolas"
+    DEFAULT_UI_FONT = "Segoe UI"
 
 DEFAULT_CONFIG: dict[str, Any] = {
     "appearance_mode": "Dark",
     "color_theme": "blue",
     "editor_color_scheme": "Dark Modern",
     "ui_scale_percent": 100,
-    "editor_font_family": "Consolas",
+    "editor_font_family": DEFAULT_EDITOR_FONT,
     "editor_font_size": 15,
     "console_font_size": 13,
     "ui_font_size": 13,                 # UI chrome: toolbar, tabs, sidebar, menus, tables, status bar, diagrams
@@ -33,11 +41,11 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "auto_save_on_focus_loss": False,
     "auto_run_on_external_save": True,
     "external_poll_interval_ms": 800,
-    "iverilog_path": "C:\\iverilog\\bin\\iverilog.exe",
-    "vvp_path": "C:\\iverilog\\bin\\vvp.exe",
-    "gtkwave_path": "C:\\iverilog\\gtkwave\\bin\\gtkwave.exe",
-    "lib_dir": "C:\\iverilog\\compstruct\\lib",
-    "notepad_pp_path": "C:\\Program Files\\Notepad++\\notepad++.exe",
+    "iverilog_path": "" if IS_MAC else "C:\\iverilog\\bin\\iverilog.exe",
+    "vvp_path": "" if IS_MAC else "C:\\iverilog\\bin\\vvp.exe",
+    "gtkwave_path": "" if IS_MAC else "C:\\iverilog\\gtkwave\\bin\\gtkwave.exe",
+    "lib_dir": "" if IS_MAC else "C:\\iverilog\\compstruct\\lib",
+    "notepad_pp_path": "" if IS_MAC else "C:\\Program Files\\Notepad++\\notepad++.exe",
     "std_flag": "-g2012",
     "include_workdir_as_ylib": True,
     "enable_wall_warnings": True,
@@ -58,7 +66,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     # --- global Verilog package manager ("import once, resolve anywhere")
     "global_packages_dir": str(Path.home() / ".veriflow_studio" / "packages"),
     "library_packages": [
-        {"name": "Course Built-in Library (compstruct\\lib)", "path": "C:\\iverilog\\compstruct\\lib",
+        {"name": "Course Built-in Library", "path": "" if IS_MAC else "C:\\iverilog\\compstruct\\lib",
          "enabled": True, "builtin": True, "kind": "builtin"},
     ],
     "auto_resolve_packages_with_l_flag": True,
@@ -93,8 +101,9 @@ RANGES: dict[str, tuple[float, float]] = {
     "sim_timeout_sec": (1.0, 30.0),
     "external_poll_interval_ms": (500, 3000),
 }
-FONT_FAMILIES = ("Consolas", "Cascadia Code", "JetBrains Mono", "Courier New", "Lucida Console")
-UI_FAMILY, MONO_FAMILY = "Segoe UI", "Consolas"
+FONT_FAMILIES = (("SF Mono", "Menlo", "Monaco", "JetBrains Mono", "Courier") if IS_MAC
+                 else ("Consolas", "Cascadia Code", "JetBrains Mono", "Courier New", "Lucida Console"))
+UI_FAMILY, MONO_FAMILY = (DEFAULT_UI_FONT, DEFAULT_EDITOR_FONT)
 # "UI & Text Size" presets: (ui_font_size, editor_font_size, console_font_size)
 TEXT_SIZE_PRESETS = {
     "Compact (12pt)": (12, 13, 12),
@@ -195,7 +204,10 @@ def resource_dir() -> Path:
 
 
 def config_path() -> Path:
-    base = Path(os.environ.get("APPDATA") or Path.home() / ".config") / "VeriFlowStudio"
+    if IS_MAC:
+        base = Path.home() / "Library" / "Application Support" / "VeriFlowStudio"
+    else:
+        base = Path(os.environ.get("APPDATA") or Path.home() / ".config") / "VeriFlowStudio"
     return base / "config.json"
 
 
@@ -207,7 +219,26 @@ def _first_existing(*cands: str | Path | None) -> str:
 
 
 def detect_toolchains() -> dict[str, str]:
-    """Locate iverilog/vvp/gtkwave/Notepad++ and the lecturer library. Empty string = not found."""
+    """Locate iverilog/vvp/gtkwave/external editor and the lecturer library. Empty string = not found."""
+    if IS_MAC:
+        which_iv = shutil.which("iverilog")
+        which_vvp = shutil.which("vvp")
+        gtkwave = _first_existing(
+            shutil.which("gtkwave"),
+            "/Applications/gtkwave.app/Contents/Resources/bin/gtkwave",
+            "/opt/homebrew/bin/gtkwave",
+            "/usr/local/bin/gtkwave",
+        )
+        iverilog = _first_existing(which_iv, "/opt/homebrew/bin/iverilog", "/usr/local/bin/iverilog")
+        vvp = _first_existing(which_vvp, "/opt/homebrew/bin/vvp", "/usr/local/bin/vvp")
+        lib_candidates = (
+            Path("/opt/homebrew/share/iverilog"),
+            Path("/usr/local/share/iverilog"),
+            Path.home() / "iverilog" / "lib",
+        )
+        lib = next((str(p) for p in lib_candidates if p.is_dir()), "")
+        return {"iverilog_path": iverilog, "vvp_path": vvp, "gtkwave_path": gtkwave,
+                "notepad_pp_path": "", "lib_dir": lib}
     pf, pf86 = os.environ.get("ProgramFiles", r"C:\Program Files"), os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")
     which_iv = shutil.which("iverilog")
     bin_dirs = [Path(r"C:\iverilog\bin"), Path(pf) / "iverilog" / "bin"]

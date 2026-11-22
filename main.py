@@ -41,6 +41,7 @@ from verilog_parser import parse_verilog_source
 LINK_RE = re.compile(r"((?:[A-Za-z]:[\\\\/][^:*?\"<>|\r\n]+?|[^\s:\"'()<>|]+?)\.(?:sv|vh|svh|v)):(\d+)(?::(\d+))?\b")
 
 IS_WINDOWS = os.name == "nt"
+IS_MAC = sys.platform == "darwin"
 LAYOUT_LABELS = {"Side-by-Side": "Side-by-Side Split (.v + _tb.v)", "Tabbed": "Tabbed View"}
 SEV_ICON = {"error": "⊗ error", "warning": "⚠ warning", "info": "ⓘ info"}
 SNIPPET_LABEL = "+ Snippet ▾"
@@ -1584,6 +1585,8 @@ class VeriFlowApp(ctk.CTk):
         p = Path(path)
         if p.is_dir() and IS_WINDOWS:
             os.startfile(str(p))  # type: ignore[attr-defined]
+        elif p.is_dir() and IS_MAC:
+            subprocess.Popen(["open", str(p)])
         elif not p.is_dir():
             messagebox.showwarning("Open folder", f"Folder not found:\n{p}", parent=self)
 
@@ -1676,6 +1679,8 @@ class VeriFlowApp(ctk.CTk):
                 subprocess.Popen([npp, f"-n{d['line'] or 1}", str(p)], creationflags=NO_WINDOW)
             elif IS_WINDOWS:
                 os.startfile(str(p))  # type: ignore[attr-defined]
+            elif IS_MAC:
+                subprocess.Popen(["open", "-t", str(p)])
 
     # ================================================================== command preview
     def _update_cmd(self) -> None:
@@ -2404,11 +2409,14 @@ class VeriFlowApp(ctk.CTk):
         try:
             if Path(npp).is_file():
                 subprocess.Popen([npp, *files], creationflags=NO_WINDOW)
+            elif IS_MAC:
+                for f in files:
+                    subprocess.Popen(["open", "-t", f])
             elif IS_WINDOWS:
                 for f in files:
                     os.startfile(f)  # type: ignore[attr-defined]
             else:
-                raise OSError("Notepad++ not found")
+                raise OSError("No external editor configured")
         except OSError as exc:
             messagebox.showerror("Open in Notepad++", str(exc), parent=self)
             return
@@ -2430,7 +2438,7 @@ class VeriFlowApp(ctk.CTk):
                                            "(Gen _tb.v does this) and press F5.", parent=self)
             return
         if not Path(gtk).is_file():
-            messagebox.showwarning("GTKWave", f"gtkwave.exe not found at\n{gtk}\nSet it in ⚙ Settings → Compiler & Toolchain.", parent=self)
+            messagebox.showwarning("GTKWave", f"GTKWave not found at\n{gtk}\nSet it in ⚙ Settings → Compiler & Toolchain.", parent=self)
             return
         subprocess.Popen([gtk, self.last_vcd], cwd=str(self.work_dir), creationflags=NO_WINDOW)
 
@@ -2515,6 +2523,8 @@ class VeriFlowApp(ctk.CTk):
         self.bind_all("<Shift-F5>", lambda e: self.stop_run())
         self.bind_all("<F7>", lambda e: self.run_lint(show=True))
         self.bind("<Control-KeyPress>", self._on_ctrl)
+        if IS_MAC:
+            self.bind("<Command-KeyPress>", self._on_ctrl)
         self.bind("<FocusIn>", self._on_app_focus_in)
         self.bind("<FocusOut>", self._on_app_focus_out)
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 import math
 import os
 import re
+import sys
 import tkinter as tk
 from collections import defaultdict
 from tkinter import font as tkfont
@@ -19,6 +20,7 @@ from intellisense import build_items, completion_context, rank
 from verilog_parser import parse_verilog_source
 
 IS_WINDOWS = os.name == "nt"
+IS_MAC = sys.platform == "darwin"
 GATE_WORDS = {"and", "nand", "or", "nor", "xor", "xnor", "not", "buf", "bufif0", "bufif1", "notif0", "notif1"}
 TOKEN_TAGS = ("keyword", "control", "type", "gate", "number", "string", "comment", "directive", "systask", "operator", "ident")
 TAG_FALLBACK = {"control": "keyword", "ident": "fg"}
@@ -976,6 +978,8 @@ class VerilogCodeEditor(ctk.CTkFrame):
     def _bind_keys(self) -> None:
         t = self.text
         t.bind("<Control-KeyPress>", self._on_ctrl)
+        if IS_MAC:
+            t.bind("<Command-KeyPress>", self._on_ctrl)
         t.bind("<Control-MouseWheel>", lambda e: (self._zoom(1 if e.delta > 0 else -1), "break")[1])
         t.bind("<Control-Button-4>", lambda e: (self._zoom(1), "break")[1])
         t.bind("<Control-Button-5>", lambda e: (self._zoom(-1), "break")[1])
