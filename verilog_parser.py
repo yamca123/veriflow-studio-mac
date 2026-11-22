@@ -966,15 +966,12 @@ def generate_testbench_skeleton(module_info: dict, include_vcd: bool = True, ste
         L += [f'        $display("{header}");', f'        $display("{"-" * max(len(header), 8)}");']
     fmt = " | ".join(f"{p['name']}=%b" for p in shown)
     sample = f'$display("{fmt}", {", ".join(p["name"] for p in shown)});' if shown else ""
-    settle = step != 10 and bool(shown) and not empty_stimulus   # gate delays: $monitor would also print transient glitches
     if checked:
         L += ["        errors = 0;", "        // self-checking: every vector prints PASS or FAIL (FAIL rows turn red in the truth table)"]
-    elif shown and not settle:
-        L.append(f'        $monitor("{fmt}", {", ".join(p["name"] for p in shown)});')
-    elif settle:
-        L.append("        // outputs are sampled with $display after each step (settled values only, no glitches)")
+    elif shown:
+        L.append("        // sample once per vector, after the delay (settled values only)")
     L.append("")
-    after = f" {sample}" if settle and not checked else ""
+    after = f" {sample}" if shown and not checked else ""
     vec_args = ", ".join(p["name"] for p in shown)
 
     def check_block(indent: str) -> list[str]:

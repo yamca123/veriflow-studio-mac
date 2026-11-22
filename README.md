@@ -284,6 +284,9 @@ still shows either this full command or the minimal command from the course inst
 
 #### 🧪 One-click testbench (`_tb.v`) generator
 
+Every newly generated testbench uses a single `$display` row after each timed vector. This avoids `$monitor`
+duplicates and prints only settled values after gate propagation delays.
+
 `🧪 Gen _tb.v` parses the design (ANSI and non-ANSI ports, comma lists such as `input [3:0] a, b, c;`,
 parameterised headers like `module Mux #(parameter W=16)`, multi-bit buses `[msb:lsb]`) and writes a complete
 `<Module>_tb.v`:
